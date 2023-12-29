@@ -12,4 +12,3 @@ build_web
 out
 CMakeSettings.json
 CMakeUserPresets.json
-external

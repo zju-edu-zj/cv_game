@@ -107,6 +107,27 @@ Model::Model(Model&& rhs) noexcept
     _boxVbo = 0;
     _boxEbo = 0;
 }
+Model& Model::operator=(Model&& rhs) noexcept {
+    if (this != &rhs) {
+        // 释放当前对象的资源
+        cleanup();
+
+        // 移动赋值资源
+        _vertices = std::move(rhs._vertices);
+        _indices = std::move(rhs._indices);
+        _boundingBox = std::move(rhs._boundingBox);
+        // 还可以继续移动其他成员
+
+        // 使 rhs 的资源处于有效但未定义的状态
+        rhs._vao = 0;
+        rhs._vbo = 0;
+        rhs._ebo = 0;
+        rhs._boxVao = 0;
+        rhs._boxVbo = 0;
+        rhs._boxEbo = 0;
+    }
+    return *this;
+}
 
 Model::~Model() {
     cleanup();

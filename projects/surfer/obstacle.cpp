@@ -59,3 +59,17 @@ Obstacle::Obstacle(Obstacle&& rhs):Model(std::move(rhs)){
 
     initBoxGLResources();
 }
+
+Obstacle& Obstacle::operator=(Obstacle&& rhs) {
+    if (this != &rhs) {
+        Model::operator=(std::move(rhs)); // 移动赋值基类部分
+
+        transform = std::move(rhs.transform); // 移动赋值 transform
+        // 对于其他成员变量进行移动赋值操作（如果有）
+
+        // 重新初始化 OpenGL 资源
+        initGLResources(); // 例如，重新初始化 _vao, _vbo, _ebo 等 OpenGL 资源
+        initBoxGLResources(); // 初始化 _boxVao, _boxVbo, _boxEbo 等
+    }
+    return *this;
+}

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "utility")
 
+set(CMAKE_BUILD_TYPE Debug) #for debug
 # language settings
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 14)

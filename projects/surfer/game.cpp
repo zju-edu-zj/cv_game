@@ -3,6 +3,7 @@
 #include <imgui_impl_opengl3.h>
 
 #include <random>
+#include <algorithm>
 
 #include "../base/transform.h"
 #include "game.h"
@@ -27,7 +28,7 @@ Game::Game(const Options& options) : Application(options) {
     glm::quat rotation_more = glm::angleAxis(angle, glm::vec3(0.0f, 1.0f, 0.0f));
     _character->transform.rotation = rotation_more* _character->transform.rotation; //rotation 90°
     //init ground
-    _ground.reset(new Ground(5000.0,5000.0)); //big enough
+    _ground.reset(new Ground(50.0,5000.0)); //long enough
     initObstacles();
 
     // init textures
@@ -53,7 +54,7 @@ Game::Game(const Options& options) : Application(options) {
     // init camera
     _camera.reset(new PerspectiveCamera(
         glm::radians(50.0f), 1.0f * _windowWidth / _windowHeight, 0.1f, 10000.0f));
-    _camera->transform.position = glm::vec3(0.0,3.0,10.0);
+    _camera->transform.position = glm::vec3(0.0,3.0,12.0);
 
     // init light
     _light.reset(new DirectionalLight());
@@ -184,49 +185,16 @@ void Game::initPhongShader() {
     _usualShader->attachFragmentShader(fsCode);
     _usualShader->link();
 }
-void Game::handleInput() {
-    // constexpr float cameraMoveSpeed = 5.0f;
-    // constexpr float cameraRotateSpeed = 0.02f;
+void Game::update(){
+    _moveForward += _speed*_deltaTime;
+    _character->transform.position += _speed*_deltaTime*_camera->transform.getFront();
+    _camera->transform.position += _speed*_deltaTime*_camera->transform.getFront(); //auto
     bool flag = collisionDetect();
-    if(!flag){
+    if(flag){
         //game over
-    }
-    // _character->transform.position += _speed*_deltaTime*_camera->transform.getFront();
-    // _camera->transform.position += _speed*_deltaTime*_camera->transform.getFront(); //auto
-
-    if (_input.keyboard.keyStates[GLFW_KEY_ESCAPE] != GLFW_RELEASE) {
-        glfwSetWindowShouldClose(_window, true);
-        return;
-    }
-    if (_input.keyboard.keyStates[GLFW_KEY_W] != GLFW_RELEASE) {
-        //std::cout << "W" << std::endl;
-        //move both character and camera
-        _character->transform.position += _speed*_deltaTime*_camera->transform.getFront();
-        _camera->transform.position += _speed*_deltaTime*_camera->transform.getFront(); 
-    }
-
-    if (_input.keyboard.keyStates[GLFW_KEY_A] != GLFW_RELEASE) {
-        //just move character
-        _character->transform.position -= _speed*_deltaTime*_camera->transform.getRight(); //move right according to camera
-
-    }
-
-    if (_input.keyboard.keyStates[GLFW_KEY_S] != GLFW_RELEASE) {
-        //std::cout << "S" << std::endl;
-        //move both character and camera
-        _character->transform.position -= _speed*_deltaTime*_camera->transform.getFront();
-        _camera->transform.position -= _speed*_deltaTime*_camera->transform.getFront(); 
-    }
-
-    if (_input.keyboard.keyStates[GLFW_KEY_D] != GLFW_RELEASE) {
-        //std::cout << "D" << std::endl;
-        _character->transform.position += _speed*_deltaTime*_camera->transform.getRight();
-    }
-
-    //jump
-    if (isSpaceValid && _input.keyboard.keyStates[GLFW_KEY_SPACE] == GLFW_PRESS) { 
-        _velocity = jump_velocity; //start jumping
-        isSpaceValid = false; //can jump only once
+        std::cout << "collision detected" << std::endl;
+        _speed = 0; //stop
+        _velocity = 0; //jump invalid too
     }
     if(!isSpaceValid){ //the jumping process
         _character->transform.position.y += _velocity*_deltaTime; //jump up
@@ -240,8 +208,73 @@ void Game::handleInput() {
             //std::cout << _velocity << std::endl;
         }
     }
+    //extend the scenes and destroy objects automatically
+    float camera_pos = _camera->transform.position.z;
+    for (auto it = _obstacles.begin(); it != _obstacles.end();) {
+    if (it->transform.position.z >= camera_pos) {
+        it = _obstacles.erase(it);
+        //std::cout << "remove one" << std::endl;
+    }else {
+        ++it;  //to prohibit invalid iterators
+    }
+}
+
+
+    const float far_view = 10.0f;
+    if(_moveForward >= far_view){
+        float character_pos = _character->transform.position.z;
+        int num = 5;
+        generateRandomObstacles(num,-10.0,10.0,character_pos-15,character_pos-5);
+        //std::cout << _obstacles.size() << std::endl;
+        _moveForward = 0; //clear
+    }
+}
+void Game::handleInput() {
+    
+
+    if (_input.keyboard.keyStates[GLFW_KEY_ESCAPE] != GLFW_RELEASE) {
+        glfwSetWindowShouldClose(_window, true);
+        return;
+    }
+    if (_input.keyboard.keyStates[GLFW_KEY_W] != GLFW_RELEASE) {
+        //std::cout << "W" << std::endl;
+        //move both character and camera
+        _character->transform.position += _speed*_deltaTime*_camera->transform.getFront();
+        _camera->transform.position += _speed*_deltaTime*_camera->transform.getFront(); 
+    }
+
+    if (_input.keyboard.keyStates[GLFW_KEY_A] != GLFW_RELEASE) {
+        //just move character and character can only move in the panel
+        if(_character->transform.position.x >= -panel_width){
+            _character->transform.position -= _speed*_deltaTime*_camera->transform.getRight();
+        }
+
+    }
+
+    if (_input.keyboard.keyStates[GLFW_KEY_S] != GLFW_RELEASE) {
+        //std::cout << "S" << std::endl;
+        //move both character and camera
+        _character->transform.position -= _speed*_deltaTime*_camera->transform.getFront();
+        _camera->transform.position -= _speed*_deltaTime*_camera->transform.getFront(); 
+    }
+
+    if (_input.keyboard.keyStates[GLFW_KEY_D] != GLFW_RELEASE) {
+        //std::cout << "D" << std::endl;
+        if(_character->transform.position.x <= panel_width){
+            _character->transform.position += _speed*_deltaTime*_camera->transform.getRight();
+        }
+    }
+
+    //jump
+    if (isSpaceValid && _input.keyboard.keyStates[GLFW_KEY_SPACE] == GLFW_PRESS) { 
+        _velocity = jump_velocity; //start jumping
+        isSpaceValid = false; //can jump only once
+    }
+    
 
     _input.forwardState();
+
+    update(); //update the logical state of the game
 }
 
 void Game::renderFrame() {
@@ -343,6 +376,7 @@ void Game::generateRandomObstacles(int obstacleCount, float minX, float maxX, fl
         bool flag = detectHurdle(x,z); //to detect if the current x,z don't collide with others
         if(!flag){
             i--;
+            std::cout << "failed" << std::endl;
             continue;
         }
         Obstacle cur;
@@ -350,7 +384,7 @@ void Game::generateRandomObstacles(int obstacleCount, float minX, float maxX, fl
         cur.transform.position.z = z;
         float height = cur.getBoundingBox().min.y; //get the height of the character
         cur.transform.position.y = -height; //move to exactly the ground
-        _obstacles.emplace_back(std::move(cur)); //cur is of no use now
+        _obstacles.insert(std::move(cur)); //cur is of no use now
     }
 }
 bool Game::detectHurdle(float x, float z){
@@ -369,8 +403,42 @@ bool Game::detectHurdle(float x, float z){
 }
 
 bool Game::collisionDetect(){
-    /*
-    *TO DO
-    */
-    return true;
+    BoundingBox box1 = transformBoundingBox(_character->getBoundingBox(),_character->transform.getLocalMatrix());
+    for(auto it=_obstacles.begin();it!=_obstacles.end();++it){
+        BoundingBox box2 = transformBoundingBox(it->getBoundingBox(),it->transform.getLocalMatrix());
+        // 检查每个维度上的重叠
+        bool xOverlap = (box1.min.x <= box2.max.x) && (box1.max.x >= box2.min.x);
+        bool yOverlap = (box1.min.y <= box2.max.y) && (box1.max.y >= box2.min.y);
+        bool zOverlap = (box1.min.z <= box2.max.z) && (box1.max.z >= box2.min.z);
+        bool flag = xOverlap && yOverlap && zOverlap;
+        if(flag){ // 如果三个维度上都有重叠，则认为发生碰撞
+            return true;
+        }
+    }
+
+    return false;
+}
+
+BoundingBox Game::transformBoundingBox(const BoundingBox& box, const glm::mat4& transform) {
+    BoundingBox transformedBox;
+
+    // Transform each corner of the bounding box
+    glm::vec3 corners[8] = {
+        glm::vec3(box.min.x, box.min.y, box.min.z),
+        glm::vec3(box.min.x, box.min.y, box.max.z),
+        glm::vec3(box.min.x, box.max.y, box.min.z),
+        glm::vec3(box.min.x, box.max.y, box.max.z),
+        glm::vec3(box.max.x, box.min.y, box.min.z),
+        glm::vec3(box.max.x, box.min.y, box.max.z),
+        glm::vec3(box.max.x, box.max.y, box.min.z),
+        glm::vec3(box.max.x, box.max.y, box.max.z)
+    };
+
+    for (int i = 0; i < 8; ++i) {
+        glm::vec4 transformedPoint = transform * glm::vec4(corners[i], 1.0f);
+        transformedBox.min = glm::min(transformedBox.min, glm::vec3(transformedPoint));
+        transformedBox.max = glm::max(transformedBox.max, glm::vec3(transformedPoint));
+    }
+
+    return transformedBox;
 }

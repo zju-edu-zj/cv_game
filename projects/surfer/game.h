@@ -2,7 +2,8 @@
 
 #include <memory>
 #include <string>
-#include <vector>
+#include <set>
+#include <unordered_set>
 
 #include "../base/application.h"
 #include "../base/camera.h"
@@ -46,15 +47,19 @@ private:
 
     std::unique_ptr<SkyBox> _skybox;
 
-    std::vector<Obstacle> _obstacles;
+    std::set<Obstacle> _obstacles; 
 
-    const float _speed = 4.0f; //character move speed
+    float _speed = 4.0f; //character move speed
     float _velocity = 0;
     const float accelation = -10.0; //gravity
     const float jump_velocity = 6.0;
 
+    const float panel_width = 12.0;
+
     bool isSpaceValid = true;
 
+    float _moveForward = 0; //move forward distance
+    
     void initTextureShader();
     void initPhongShader();
 
@@ -66,8 +71,13 @@ private:
     * 碰撞检测
     */
     bool collisionDetect();
+    BoundingBox transformBoundingBox(const BoundingBox& box, const glm::mat4& transform);
 
     void handleInput() override;
 
     void renderFrame() override;
+    /*
+    * process the logical updating of states
+    */
+    void update();
 };
