@@ -54,7 +54,7 @@ private:
     const float accelation = -10.0; //gravity
     const float jump_velocity = 6.0;
 
-    const float panel_width = 12.0;
+    const float panel_width = 5.0;
 
     bool isSpaceValid = true;
 

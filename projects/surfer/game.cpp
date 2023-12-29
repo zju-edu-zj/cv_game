@@ -261,6 +261,7 @@ void Game::handleInput() {
     if (_input.keyboard.keyStates[GLFW_KEY_D] != GLFW_RELEASE) {
         //std::cout << "D" << std::endl;
         if(_character->transform.position.x <= panel_width){
+            //std::cout << _character->transform.position.x <<' ' << panel_width << std::endl;
             _character->transform.position += _speed*_deltaTime*_camera->transform.getRight();
         }
     }
