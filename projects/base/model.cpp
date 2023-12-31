@@ -2,6 +2,8 @@
 #include <iostream>
 #include <limits>
 #include <unordered_map>
+#include <fstream>
+#include <sstream>
 
 #include <tiny_obj_loader.h>
 
@@ -79,7 +81,117 @@ Model::Model(const std::string& filepath) {
         throw std::runtime_error("OpenGL Error: " + std::to_string(error));
     }
 }
+Model::Model(const std::string& filename,bool myloader){
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file: " << filename << std::endl;
+        return;
+    }
+    
+    std::unordered_map<Vertex, uint32_t> uniqueVertices;
 
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec2> texCoords;
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream iss(line);
+        std::string type;
+        iss >> type;
+        if (type == "v") {
+            glm::vec3 position;
+            iss >> position.x >> position.y >> position.z;
+            positions.push_back(position);
+        } else if (type == "vn") {
+            glm::vec3 normal;
+            iss >> normal.x >> normal.y >> normal.z;
+            normals.push_back(normal);
+        } else if (type == "vt") {
+            glm::vec2 texCoord;
+            iss >> texCoord.x >> texCoord.y;
+            texCoords.push_back(texCoord);
+        } else if (type == "f") {  //we should support both 4 and 3 vertices
+            std::vector<std::string> vertexData;
+            for (int i = 0; i < 4; ++i) {
+                std::string vertexStr;
+                iss >> vertexStr;
+                if(!vertexStr.empty()){
+                    vertexData.push_back(vertexStr);
+                }
+            }
+            if (vertexData.size() == 4) {
+                std::vector<uint32_t> indices; //record temporarily
+                for (int i = 0; i < 4; ++i) {
+                    std::istringstream vertexStream(vertexData[i]);
+                    try
+                    {
+                        std::string indexStr;
+                        std::getline(vertexStream, indexStr, '/');
+                        uint32_t positionIndex = std::stoi(indexStr) - 1;
+                        std::getline(vertexStream, indexStr, '/');
+                        uint32_t texCoordIndex = std::stoi(indexStr) - 1;
+                        std::getline(vertexStream, indexStr, '/');
+                        uint32_t normalIndex = std::stoi(indexStr) - 1;
+                        Vertex cur_vertex(positions[positionIndex], normals[normalIndex], texCoords[texCoordIndex]);
+                        if (uniqueVertices.count(cur_vertex) == 0) {
+                            uniqueVertices[cur_vertex] = static_cast<uint32_t>(_vertices.size());
+                            _vertices.push_back(cur_vertex);
+                        }
+                        indices.push_back(uniqueVertices[cur_vertex]);
+                    }
+                    catch(const std::exception& e)
+                    {
+                        std::cerr << e.what() << '\n';
+                        for(auto &s:vertexData){
+                            std::cout << s << ' ' << std::endl; //for debug
+                        }
+                    }
+                }
+                //now push into true indices
+                _indices.push_back(indices[0]);
+                _indices.push_back(indices[1]);
+                _indices.push_back(indices[2]);
+                //the next triangle
+                _indices.push_back(indices[2]);
+                _indices.push_back(indices[3]);
+                _indices.push_back(indices[0]);
+            } else if(vertexData.size()==3){ // 如果是三角形面
+                for (int i = 0; i < 3; ++i) {
+                    std::istringstream vertexStream(vertexData[i]);
+                    std::string indexStr;
+                    std::getline(vertexStream, indexStr, '/');
+                    uint32_t positionIndex = std::stoi(indexStr) - 1;
+                    std::getline(vertexStream, indexStr, '/');
+                    uint32_t texCoordIndex = std::stoi(indexStr) - 1;
+                    std::getline(vertexStream, indexStr, '/');
+                    uint32_t normalIndex = std::stoi(indexStr) - 1;
+                    Vertex cur_vertex(positions[positionIndex], normals[normalIndex], texCoords[texCoordIndex]);
+
+                    if (uniqueVertices.count(cur_vertex) == 0) {
+                        uniqueVertices[cur_vertex] = static_cast<uint32_t>(_vertices.size());
+                        _vertices.push_back(cur_vertex);
+                    }
+
+                    _indices.push_back(uniqueVertices[cur_vertex]);
+                }
+            }
+        }
+    }
+    file.close();
+
+    computeBoundingBox();
+
+    initGLResources();
+
+    initBoxGLResources();
+
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        cleanup();
+        throw std::runtime_error("OpenGL Error: " + std::to_string(error));
+    }
+
+}
 Model::Model(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
     : _vertices(vertices), _indices(indices) {
 
@@ -285,4 +397,52 @@ void Model::cleanup() {
         glDeleteVertexArrays(1, &_vao);
         _vao = 0;
     }
+}
+
+bool Model::exportToOBJ(const std::string& filename) {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file: " << filename << std::endl;
+        return false;
+    }
+
+    std::unordered_map<glm::vec3, uint32_t> positionIndexMap;
+    std::unordered_map<glm::vec3, uint32_t> normalIndexMap;
+    std::unordered_map<glm::vec2, uint32_t> texCoordIndexMap;
+
+    for (const auto& vertex : _vertices) {
+        auto pos = vertex.position;
+        auto norm = vertex.normal;
+        auto tex = vertex.texCoord;
+
+        if (positionIndexMap.find(pos) == positionIndexMap.end()) {
+            positionIndexMap[pos] = static_cast<uint32_t>(positionIndexMap.size() + 1);
+            file << "v " << pos.x << " " << pos.y << " " << pos.z << "\n";
+        }
+
+        if (normalIndexMap.find(norm) == normalIndexMap.end()) {
+            normalIndexMap[norm] = static_cast<uint32_t>(normalIndexMap.size() + 1);
+            file << "vn " << norm.x << " " << norm.y << " " << norm.z << "\n";
+        }
+
+        if (texCoordIndexMap.find(tex) == texCoordIndexMap.end()) {
+            texCoordIndexMap[tex] = static_cast<uint32_t>(texCoordIndexMap.size() + 1);
+            file << "vt " << tex.x << " " << tex.y << "\n";
+        }
+    }
+
+    for (size_t i = 0; i < _indices.size(); i += 3) {
+        file << "f ";
+        for (int j = 0; j < 3; ++j) {
+            uint32_t positionIndex = positionIndexMap[_vertices[_indices[i + j]].position];
+            uint32_t texCoordIndex = texCoordIndexMap[_vertices[_indices[i + j]].texCoord];
+            uint32_t normalIndex = normalIndexMap[_vertices[_indices[i + j]].normal];
+
+            file << positionIndex << "/" << texCoordIndex << "/" << normalIndex << " ";
+        }
+        file << "\n";
+    }
+
+    file.close();
+    return true;
 }

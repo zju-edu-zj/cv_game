@@ -80,4 +80,6 @@ private:
     * process the logical updating of states
     */
     void update();
+
+    void testOn(); //test the export and import of obj loader
 };

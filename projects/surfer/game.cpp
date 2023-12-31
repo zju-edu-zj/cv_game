@@ -21,7 +21,8 @@ const std::vector<std::string> skyboxTextureRelPaths = {
 
 Game::Game(const Options& options) : Application(options) {
     // init model
-    _character.reset(new Model(getAssetFullPath(modelRelPath)));
+    _character.reset(new Model(getAssetFullPath(modelRelPath),true));
+    testOn(); //test obj loader
     float height = _character->getBoundingBox().min.y; //get the height of the character
     _character->transform.position = glm::vec3(0.0,-height,5.0); //move to exactly the ground
     float angle = glm::radians(-90.0f);
@@ -442,4 +443,15 @@ BoundingBox Game::transformBoundingBox(const BoundingBox& box, const glm::mat4& 
     }
 
     return transformedBox;
+}
+
+void Game::testOn(){
+    //first write character to test_character.obj
+    const std::string writePath = "test_character.obj";
+    bool flag = _character->exportToOBJ(writePath);
+    if(!flag){
+        perror("cannot open file");
+    }
+    _character = nullptr;
+    _character.reset(new Model(writePath,true)); //reload to see if it's the same;
 }

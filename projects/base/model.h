@@ -13,6 +13,8 @@ public:
     Model() = default;
 
     Model(const std::string& filepath);
+    Model(const std::string& filename,bool myloader);
+    bool exportToOBJ(const std::string& filename);
 
     Model(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 
