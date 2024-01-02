@@ -15,6 +15,8 @@ const std::string modelRelPath = "obj/villager.obj";
 const std::string earthTextureRelPath = "texture/miscellaneous/earthmap.jpg";
 const std::string planetTextureRelPath = "texture/miscellaneous/planet_Quom1200.png";
 
+const std::string groundTextureRelPath = "texture/ground/final1.jpg";
+
 const std::vector<std::string> skyboxTextureRelPaths = {
     "texture/skybox/Right_Tex.jpg", "texture/skybox/Left_Tex.jpg",  "texture/skybox/Up_Tex.jpg",
     "texture/skybox/Down_Tex.jpg",  "texture/skybox/Front_Tex.jpg", "texture/skybox/Back_Tex.jpg"};
@@ -29,7 +31,17 @@ Game::Game(const Options& options) : Application(options) {
     glm::quat rotation_more = glm::angleAxis(angle, glm::vec3(0.0f, 1.0f, 0.0f));
     _character->transform.rotation = rotation_more* _character->transform.rotation; //rotation 90°
     //init ground
-    _ground.reset(new Ground(50.0,5000.0)); //long enough
+    _ground.reset(new Ground(20.0,10.0)); //long enough
+    _texture.reset(new ImageTexture2D(getAssetFullPath(groundTextureRelPath)));
+    _texture->bind();
+    
+    Transform* new_transform = new Transform();
+    transforms.push_back(*new_transform);
+    new_transform->position = glm::vec3(new_transform->position.x, new_transform->position.y, new_transform->position.z - 10);
+    transforms.push_back(*new_transform);
+    new_transform->position = glm::vec3(new_transform->position.x, new_transform->position.y, new_transform->position.z - 10);
+    transforms.push_back(*new_transform);
+    
     initObstacles();
 
     // init textures
@@ -218,6 +230,13 @@ void Game::update(){
     }else {
         ++it;  //to prohibit invalid iterators
     }
+
+    if(transforms.front().position.z > camera_pos){
+        transforms.pop_front();
+        Transform new_trans = transforms.back();
+        new_trans.position = glm::vec3(new_trans.position.x, new_trans.position.y, new_trans.position.z - 10);
+        transforms.push_back(new_trans);
+    }
 }
 
 
@@ -300,15 +319,21 @@ void Game::renderFrame() {
     const glm::mat4 view = _camera->getViewMatrix();
 
     // 1. use the shader
-    // _textureShader->use();
-    // // 2. transfer mvp matrices to gpu
-    // _textureShader->setUniformMat4("projection", projection);
-    // _textureShader->setUniformMat4("view", view);
-    // _textureShader->setUniformMat4("model", _character->transform.getLocalMatrix());
+    _textureShader->use();
+    // 2. transfer mvp matrices to gpu
+    _textureShader->setUniformMat4("projection", projection);
+    _textureShader->setUniformMat4("view", view);
+    _textureShader->setUniformMat4("model", _character->transform.getLocalMatrix());
+
+    for (auto it : transforms){
+        _ground->transform = it;
+        _textureShader->setUniformMat4("model", _ground->transform.getLocalMatrix());
+        _ground->draw();
+    }
     // // 3. enable textures and transform textures to gpu
     // _simpleMaterial->mapKd->bind();
     // _textureShader->unuse();
-    //_sphere->draw();
+    // _sphere->draw();
     
     // for the usual shader
     _usualShader->use();
@@ -323,7 +348,6 @@ void Game::renderFrame() {
     _usualShader->setUniformVec3("directionalLight.direction", _light->transform.getFront());
     _usualShader->setUniformFloat("directionalLight.intensity", _light->intensity);
     _usualShader->setUniformVec3("directionalLight.color", _light->color);
-    _ground->draw();
 
     _usualShader->setUniformMat4("model", _character->transform.getLocalMatrix());
     _character->draw();

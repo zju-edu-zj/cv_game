@@ -4,6 +4,7 @@
 #include <string>
 #include <set>
 #include <unordered_set>
+#include <deque>
 
 #include "../base/application.h"
 #include "../base/camera.h"
@@ -35,6 +36,8 @@ private:
     std::unique_ptr<Model> _character;
 
     std::unique_ptr<Model> _ground;
+    std::unique_ptr<ImageTexture2D> _texture;
+    std::deque<Transform> transforms;
 
     std::unique_ptr<SimpleMaterial> _simpleMaterial;
     std::unique_ptr<PhongMaterial> _phongMaterial;
