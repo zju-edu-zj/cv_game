@@ -32,15 +32,15 @@ Game::Game(const Options& options) : Application(options) {
     _character->transform.rotation = rotation_more* _character->transform.rotation; //rotation 90°
     //init ground
     _ground.reset(new Ground(20.0,10.0)); //long enough
-    _texture.reset(new ImageTexture2D(getAssetFullPath(groundTextureRelPath)));
-    _texture->bind();
+    _groundTexture.reset(new ImageTexture2D(getAssetFullPath(groundTextureRelPath)));
+    _groundTexture->bind();
     
-    Transform* new_transform = new Transform();
-    transforms.push_back(*new_transform);
-    new_transform->position = glm::vec3(new_transform->position.x, new_transform->position.y, new_transform->position.z - 10);
-    transforms.push_back(*new_transform);
-    new_transform->position = glm::vec3(new_transform->position.x, new_transform->position.y, new_transform->position.z - 10);
-    transforms.push_back(*new_transform);
+    Transform new_transform;
+    _groundTransforms.push_back(new_transform);
+    new_transform.position.z -= 10;
+    _groundTransforms.push_back(new_transform);
+    new_transform.position.z -= 10;
+    _groundTransforms.push_back(new_transform);
     
     initObstacles();
 
@@ -69,13 +69,20 @@ Game::Game(const Options& options) : Application(options) {
         glm::radians(50.0f), 1.0f * _windowWidth / _windowHeight, 0.1f, 10000.0f));
     _camera->transform.position = glm::vec3(0.0,3.0,12.0);
 
-    // init light
-    _light.reset(new DirectionalLight());
-    _light->intensity = 1.0;
-    _light->color = glm::vec3(1.0,1.0,1.0);
-    //_light->intensity = 0.5; default intensity and color
-    _light->transform.rotation =
-        glm::angleAxis(glm::radians(45.0f), glm::normalize(glm::vec3(-1.0f, -2.0f, -1.0f)));
+    // init lights
+    _ambientLight.reset(new AmbientLight);
+    _ambientLight->intensity = 1.0;
+    _directionalLight.reset(new DirectionalLight);
+    _directionalLight->intensity = 0.2f;
+    _directionalLight->transform.rotation =
+        glm::angleAxis(glm::radians(45.0f), glm::normalize(glm::vec3(-1.0f)));
+
+    _spotLight.reset(new SpotLight);
+    _spotLight->intensity = 3.0f;
+    _spotLight->angle = glm::radians(150.0f);
+    _spotLight->transform.position = glm::vec3(0.0f, 1.0f, 4.5f);
+    _spotLight->transform.rotation = glm::vec3(0.0f, 0.0f, 0.0f);
+
 
     // init shaders
     initTextureShader();
@@ -118,7 +125,13 @@ void Game::initTextureShader() {
         "#version 330 core\n"
         "in vec2 fTexCoord;\n"
         "out vec4 color;\n"
+        "struct AmbientLight {\n"
+        "    vec3 color;\n"
+        "    float intensity;\n"
+        "};\n"
+
         "uniform sampler2D mapKd;\n"
+
         "void main() {\n"
         "    color = texture(mapKd, fTexCoord);\n"
         "}\n";
@@ -141,6 +154,7 @@ void Game::initPhongShader() {
         "uniform mat4 model;\n"
         "uniform mat4 view;\n"
         "uniform mat4 projection;\n"
+        
 
         "void main() {\n"
         "    fPosition = vec3(model * vec4(aPosition, 1.0f));\n"
@@ -161,7 +175,11 @@ void Game::initPhongShader() {
         "    vec3 ks;\n"
         "    float ns;\n"
         "};\n"
-
+        "// ambient light data structure declaration\n"
+        "struct AmbientLight {\n"
+        "    vec3 color;\n"
+        "    float intensity;\n"
+        "};\n"
         "// directional light data structure declaration\n"
         "struct DirectionalLight {\n"
         "    vec3 direction;\n"
@@ -169,26 +187,58 @@ void Game::initPhongShader() {
         "    vec3 color;\n"
         "};\n"
 
+        "// spot light data structure declaration\n"
+        "struct SpotLight {\n"
+        "    vec3 position;\n"
+        "    vec3 direction;\n"
+        "    float intensity;\n"
+        "    vec3 color;\n"
+        "    float angle;\n"
+        "    float kc;\n"
+        "    float kl;\n"
+        "    float kq;\n"
+        "};\n"
+
         "// uniform variables\n"
         "uniform Material material;\n"
         "uniform DirectionalLight directionalLight;\n"
+        "uniform SpotLight spotLight;\n"
+        "uniform AmbientLight ambientLight;\n"
         "uniform vec3 viewPos;\n"
 
         "vec3 calcDirectionalLight(vec3 normal,vec3 viewDir) {\n"
         "    vec3 lightDir = normalize(-directionalLight.direction);\n"
-        "    vec3 ambient = material.ka * directionalLight.color;\n"
+        "    //vec3 ambient = material.ka * directionalLight.color;\n"
         "    vec3 diffuse = directionalLight.color * max(dot(lightDir, normal), 0.0f) * "
         "material.kd;\n"
         "    vec3 reflectDir = reflect(-lightDir, normal);\n"
         "    vec3 specular = directionalLight.color * pow(max(dot(viewDir, reflectDir), 0.0),material.ns) *"
         "material.ks;\n"
-        "    return directionalLight.intensity * (ambient+diffuse+specular);\n"
+        "    return directionalLight.intensity * (diffuse+specular);\n"
+        "}\n"
+
+        "vec3 calcSpotLight(vec3 normal,vec3 viewDir) {\n"
+        "    vec3 lightDir = normalize(spotLight.position - fPosition);\n"
+        "    float theta = acos(-dot(lightDir, normalize(spotLight.direction)));\n"
+        "    if (theta > spotLight.angle) {\n"
+        "        return vec3(0.0f, 0.0f, 0.0f);\n"
+        "    }\n"
+        "    //vec3 ambient = material.ka * spotLight.color;\n"
+        "    vec3 diffuse = spotLight.color * max(dot(lightDir, normal), 0.0f) * material.kd;\n"
+        "    vec3 reflectDir = reflect(-lightDir, normal);\n"
+        "    vec3 specular = spotLight.color * pow(max(dot(viewDir, reflectDir), 0.0),material.ns) *"
+        "material.ks;\n"
+        "    float distance = length(spotLight.position - fPosition);\n"
+        "    float attenuation = 1.0f / (spotLight.kc + spotLight.kl * distance + spotLight.kq * "
+        "distance * distance);\n"
+        "    return spotLight.intensity * attenuation * (diffuse+specular);\n"
         "}\n"
 
         "void main() {\n"
         "    vec3 normal = normalize(fNormal);\n"
         "    vec3 viewDir = normalize(viewPos - fPosition);"
-        "    vec3 total = calcDirectionalLight(normal,viewDir);\n"
+        "    vec3 total = calcDirectionalLight(normal,viewDir) + calcSpotLight(normal,viewDir) + "
+        "ambientLight.color *ambientLight.intensity *material.ka;\n"
         "    color = vec4(total, 1.0f);\n"
         "}\n";
     // ------------------------------------------------------------
@@ -199,9 +249,15 @@ void Game::initPhongShader() {
     _usualShader->link();
 }
 void Game::update(){
+    float challenge = 0.001f;
+    _speed += challenge*_deltaTime; //more and more difficult
+
     _moveForward += _speed*_deltaTime;
     _character->transform.position += _speed*_deltaTime*_camera->transform.getFront();
     _camera->transform.position += _speed*_deltaTime*_camera->transform.getFront(); //auto
+    _spotLight->transform.position += _speed*_deltaTime*_camera->transform.getFront();
+    //std::cout << _spotLight->transform.position.x << _spotLight->transform.position.y << _spotLight->transform.position.z<< std::endl;
+    
     bool flag = collisionDetect();
     if(flag){
         //game over
@@ -231,11 +287,11 @@ void Game::update(){
         ++it;  //to prohibit invalid iterators
     }
 
-    if(transforms.front().position.z > camera_pos){
-        transforms.pop_front();
-        Transform new_trans = transforms.back();
-        new_trans.position = glm::vec3(new_trans.position.x, new_trans.position.y, new_trans.position.z - 10);
-        transforms.push_back(new_trans);
+    if(_groundTransforms.front().position.z > camera_pos){
+        _groundTransforms.pop_front();
+        Transform new_trans = _groundTransforms.back();
+        new_trans.position.z -= 10;
+        _groundTransforms.push_back(new_trans);
     }
 }
 
@@ -243,15 +299,21 @@ void Game::update(){
     const float far_view = 10.0f;
     if(_moveForward >= far_view){
         float character_pos = _character->transform.position.z;
-        int num = 5;
-        generateRandomObstacles(num,-10.0,10.0,character_pos-15,character_pos-5);
+        int num = 4;
+        generateRandomObstacles(num,1.0,5.0,-8.0,8.0,character_pos-15,character_pos-5);
         //std::cout << _obstacles.size() << std::endl;
         _moveForward = 0; //clear
     }
 }
 void Game::handleInput() {
     
-
+    
+    //mouse event
+    float zoomFacter = 0.05f;
+    if(_camera->fovy <= glm::radians(80.0f)&& _camera->fovy >= glm::radians(20.0f)){
+        _camera->fovy -= _input.mouse.scroll.yOffset*zoomFacter ;
+    }
+    //keyboard event
     if (_input.keyboard.keyStates[GLFW_KEY_ESCAPE] != GLFW_RELEASE) {
         glfwSetWindowShouldClose(_window, true);
         return;
@@ -270,12 +332,13 @@ void Game::handleInput() {
         }
 
     }
-
+    //static bool is_stop = true;
+    static float temp_speed = 0.0f;
+    //stop temporarily
     if (_input.keyboard.keyStates[GLFW_KEY_S] != GLFW_RELEASE) {
-        //std::cout << "S" << std::endl;
-        //move both character and camera
-        _character->transform.position -= _speed*_deltaTime*_camera->transform.getFront();
-        _camera->transform.position -= _speed*_deltaTime*_camera->transform.getFront(); 
+        float t = _speed;
+        _speed = temp_speed;
+        temp_speed = t;  //just swap the speeds
     }
 
     if (_input.keyboard.keyStates[GLFW_KEY_D] != GLFW_RELEASE) {
@@ -285,7 +348,10 @@ void Game::handleInput() {
             _character->transform.position += _speed*_deltaTime*_camera->transform.getRight();
         }
     }
-
+    //Fit
+    if (_input.keyboard.keyStates[GLFW_KEY_F] != GLFW_RELEASE) {
+        _camera->fovy = glm::radians(50.0f); //zoom to a fit fovy
+    }
     //jump
     if (isSpaceValid && _input.keyboard.keyStates[GLFW_KEY_SPACE] == GLFW_PRESS) { 
         _velocity = jump_velocity; //start jumping
@@ -320,14 +386,20 @@ void Game::renderFrame() {
 
     // 1. use the shader
     _textureShader->use();
+    
     // 2. transfer mvp matrices to gpu
+    _groundTexture->bind(0);
+    // _textureShader->setUniformInt("mapKd", 0);
+
     _textureShader->setUniformMat4("projection", projection);
     _textureShader->setUniformMat4("view", view);
     _textureShader->setUniformMat4("model", _character->transform.getLocalMatrix());
+    // _textureShader->setUniformVec3("ambientLight.color", _ambientLight->color);
+    // _textureShader->setUniformFloat("ambientLight.intensity", _ambientLight->intensity);
 
-    for (auto it : transforms){
-        _ground->transform = it;
-        _textureShader->setUniformMat4("model", _ground->transform.getLocalMatrix());
+    for (auto &it : _groundTransforms){
+        //_ground->transform = it;
+        _textureShader->setUniformMat4("model", it.getLocalMatrix());
         _ground->draw();
     }
     // // 3. enable textures and transform textures to gpu
@@ -341,13 +413,28 @@ void Game::renderFrame() {
     _usualShader->setUniformMat4("projection", projection);
     _usualShader->setUniformMat4("view", view);
     _usualShader->setUniformMat4("model", _ground->transform.getLocalMatrix());
+
+    _usualShader->setUniformVec3("viewPos", _camera->transform.position);
+
     _usualShader->setUniformVec3("material.ka", _phongMaterial->ka);
     _usualShader->setUniformVec3("material.kd", _phongMaterial->kd);
     _usualShader->setUniformVec3("material.ks", _phongMaterial->ks);
     _usualShader->setUniformFloat("material.ns", _phongMaterial->ns);
-    _usualShader->setUniformVec3("directionalLight.direction", _light->transform.getFront());
-    _usualShader->setUniformFloat("directionalLight.intensity", _light->intensity);
-    _usualShader->setUniformVec3("directionalLight.color", _light->color);
+    
+    _usualShader->setUniformVec3("ambientLight.color", _ambientLight->color);
+    _usualShader->setUniformFloat("ambientLight.intensity", _ambientLight->intensity);
+    _usualShader->setUniformVec3("spotLight.position", _spotLight->transform.position);
+    _usualShader->setUniformVec3("spotLight.direction", _spotLight->transform.getFront()); //point down
+    _usualShader->setUniformFloat("spotLight.intensity", _spotLight->intensity);
+    _usualShader->setUniformVec3("spotLight.color", _spotLight->color);
+    _usualShader->setUniformFloat("spotLight.angle", _spotLight->angle);
+    _usualShader->setUniformFloat("spotLight.kc", _spotLight->kc);
+    _usualShader->setUniformFloat("spotLight.kl", _spotLight->kl);
+    _usualShader->setUniformFloat("spotLight.kq", _spotLight->kq);
+    _usualShader->setUniformVec3(
+        "directionalLight.direction", _directionalLight->transform.getFront());
+    _usualShader->setUniformFloat("directionalLight.intensity", _directionalLight->intensity);
+    _usualShader->setUniformVec3("directionalLight.color", _directionalLight->color);
 
     _usualShader->setUniformMat4("model", _character->transform.getLocalMatrix());
     _character->draw();
@@ -373,10 +460,30 @@ void Game::renderFrame() {
         ImGui::Text("Render Mode");
         ImGui::Separator();
 
-        ImGui::Text("Directional light");
+        ImGui::ColorEdit3("ka##3", (float*)&_phongMaterial->ka);
+        ImGui::ColorEdit3("kd##3", (float*)&_phongMaterial->kd);
+        ImGui::ColorEdit3("ks##3", (float*)&_phongMaterial->ks);
+        ImGui::SliderFloat("ns##3", &_phongMaterial->ns, 1.0f, 50.0f);
+        ImGui::NewLine();
+
+        ImGui::Text("ambient light");
         ImGui::Separator();
-        ImGui::SliderFloat("intensity", &_light->intensity, 0.0f, 2.0f);
-        ImGui::ColorEdit3("color", (float*)&_light->color);
+        ImGui::SliderFloat("intensity##1", &_ambientLight->intensity, 0.0f, 1.0f);
+        ImGui::ColorEdit3("color##1", (float*)&_ambientLight->color);
+        ImGui::NewLine();
+
+        ImGui::Text("directional light");
+        ImGui::Separator();
+        ImGui::SliderFloat("intensity##2", &_directionalLight->intensity, 0.0f, 1.0f);
+        ImGui::ColorEdit3("color##2", (float*)&_directionalLight->color);
+        ImGui::NewLine();
+
+        ImGui::Text("spot light");
+        ImGui::Separator();
+        ImGui::SliderFloat("intensity##3", &_spotLight->intensity, 0.0f, 3.0f);
+        ImGui::ColorEdit3("color##3", (float*)&_spotLight->color);
+        ImGui::SliderFloat(
+            "angle##3", (float*)&_spotLight->angle, 0.0f, glm::radians(180.0f), "%f rad");
         ImGui::NewLine();
 
         ImGui::End();
@@ -386,33 +493,65 @@ void Game::renderFrame() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-void Game::initObstacles(){
-    int num = 5; //easy mode
-    generateRandomObstacles(num,-10.0,10.0,-10.0,0);
+void Game::initObstacles() {
+    int num = 5; // easy mode
+    //generateRandomObstacles(num,1.0,5.0, -10.0, 10.0, -10.0, 0);
 }
-void Game::generateRandomObstacles(int obstacleCount, float minX, float maxX, float minZ, float maxZ) {
+
+void Game::generateRandomObstacles(
+    int obstacleCount, float minLength, float maxLength, float minX, float maxX, float minZ,
+    float maxZ) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<float> distX(minX, maxX);
     std::uniform_real_distribution<float> distZ(minZ, maxZ);
-    for (int i = 0; i < obstacleCount; ++i) {
-        // Generate random x and z positions within the specified range
+    std::uniform_real_distribution<float> distOffset(-1.0f, 1.0f);
+    std::uniform_real_distribution<float> distLength(minLength, maxLength); // 设置障碍物的长度范围
+    std::uniform_real_distribution<float> distHeight(0.5f, 1.5f);
+    std::set<std::pair<float, float>> obstaclePositions;
+
+    int generatedCount = 0;
+    while (generatedCount < obstacleCount) {
         float x = distX(gen);
         float z = distZ(gen);
-        bool flag = detectHurdle(x,z); //to detect if the current x,z don't collide with others
-        if(!flag){
-            i--;
-            std::cout << "failed" << std::endl;
+        float length = 1.0f; // 随机生成障碍物的长度
+        float Height = distHeight(gen);//  随机生成障碍物的高度
+        if (Height <= 1.0f) {
+            Height = 0.8f;
+            length = distLength(gen);
+        } else if (Height > 1.0f) {
+            Height = 3.0f;
+            std::uniform_real_distribution<float> distLength1(1.0f, 2.0f);
+            length = distLength1(gen);
+        }
+        // // 添加随机偏移量
+        // float offsetX = distOffset(gen);
+        // float offsetZ = distOffset(gen);
+        // x += offsetX;
+        // z += offsetZ;
+
+        bool flag = detectHurdle(x, z);
+        if (!flag) {
+            //std::cout << "failed" << std::endl;
             continue;
         }
         Obstacle cur;
         cur.transform.position.x = x;
         cur.transform.position.z = z;
-        float height = cur.getBoundingBox().min.y; //get the height of the character
-        cur.transform.position.y = -height; //move to exactly the ground
-        _obstacles.insert(std::move(cur)); //cur is of no use now
+        float height = cur.getBoundingBox().min.y; // get the height of the character
+        cur.transform.position.y = -height;        // move to exactly the ground
+        cur.transform.scale.x = length;
+        cur.transform.scale.y = Height;
+        std::uniform_real_distribution<float> distC(0.5,1);
+        cur.color = glm::vec3(distC(gen));
+
+        _obstacles.insert(std::move(cur));
+    
+        ++generatedCount;
     }
+
 }
+
 bool Game::detectHurdle(float x, float z){
     for(auto& hurdle: _obstacles){
         float hurdlex = hurdle.transform.position.x;

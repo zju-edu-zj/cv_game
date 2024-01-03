@@ -36,14 +36,17 @@ private:
     std::unique_ptr<Model> _character;
 
     std::unique_ptr<Model> _ground;
-    std::unique_ptr<ImageTexture2D> _texture;
-    std::deque<Transform> transforms;
+    std::unique_ptr<ImageTexture2D> _groundTexture;
+    std::deque<Transform> _groundTransforms;
 
     std::unique_ptr<SimpleMaterial> _simpleMaterial;
     std::unique_ptr<PhongMaterial> _phongMaterial;
     
     std::unique_ptr<PerspectiveCamera> _camera;
-    std::unique_ptr<DirectionalLight> _light;
+
+    std::unique_ptr<AmbientLight> _ambientLight;
+    std::unique_ptr<DirectionalLight> _directionalLight;
+    std::unique_ptr<SpotLight> _spotLight;
 
     std::unique_ptr<GLSLProgram> _textureShader; //for texture
     std::unique_ptr<GLSLProgram> _usualShader; //the ususal ones
@@ -67,7 +70,10 @@ private:
     void initPhongShader();
 
     void initObstacles();
-    void generateRandomObstacles(int obstacleCount, float minX, float maxX, float minZ, float maxZ);
+    //void generateRandomObstacles(int obstacleCount, float minX, float maxX, float minZ, float maxZ);
+    void generateRandomObstacles(
+        int obstacleCount, float minLength, float maxLength, float minX,
+        float maxX, float minZ, float maxZ);
     bool detectHurdle(float x, float z);
     
     /*
