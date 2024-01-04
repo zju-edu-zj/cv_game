@@ -24,7 +24,7 @@ const std::vector<std::string> skyboxTextureRelPaths = {
 Game::Game(const Options& options) : Application(options) {
     // init model
     _character.reset(new Model(getAssetFullPath(modelRelPath),true));
-    //testOn(); //test obj loader
+    testOn(); //test obj loader
     float height = _character->getBoundingBox().min.y; //get the height of the character
     _character->transform.position = glm::vec3(0.0,-height,5.0); //move to exactly the ground
     float angle = glm::radians(-90.0f);
@@ -131,9 +131,11 @@ void Game::initTextureShader() {
         "};\n"
 
         "uniform sampler2D mapKd;\n"
+        "uniform AmbientLight ambientLight;\n"
 
         "void main() {\n"
-        "    color = texture(mapKd, fTexCoord);\n"
+        "    vec3 result = ambientLight.color* ambientLight.intensity* texture(mapKd, fTexCoord).rgb;\n"
+        "    color = vec4(result,1.0f);\n"
         "}\n";
 
     _textureShader.reset(new GLSLProgram);
@@ -394,8 +396,8 @@ void Game::renderFrame() {
     _textureShader->setUniformMat4("projection", projection);
     _textureShader->setUniformMat4("view", view);
     _textureShader->setUniformMat4("model", _character->transform.getLocalMatrix());
-    // _textureShader->setUniformVec3("ambientLight.color", _ambientLight->color);
-    // _textureShader->setUniformFloat("ambientLight.intensity", _ambientLight->intensity);
+    _textureShader->setUniformVec3("ambientLight.color", _ambientLight->color);
+    _textureShader->setUniformFloat("ambientLight.intensity", _ambientLight->intensity);
 
     for (auto &it : _groundTransforms){
         //_ground->transform = it;
