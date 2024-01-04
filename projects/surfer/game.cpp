@@ -282,11 +282,11 @@ void Game::update(){
     //extend the scenes and destroy objects automatically
     float camera_pos = _camera->transform.position.z;
     for (auto it = _obstacles.begin(); it != _obstacles.end();) {
-    if (it->transform.position.z >= camera_pos) {
-        it = _obstacles.erase(it);
-        //std::cout << "remove one" << std::endl;
-    }else {
-        ++it;  //to prohibit invalid iterators
+        if (it->transform.position.z >= camera_pos) {
+            it = _obstacles.erase(it);
+        }else {
+            ++it;  //to prohibit invalid iterators
+        }
     }
 
     if(_groundTransforms.front().position.z > camera_pos){
@@ -295,7 +295,6 @@ void Game::update(){
         new_trans.position.z -= 10;
         _groundTransforms.push_back(new_trans);
     }
-}
 
 
     const float far_view = 10.0f;
@@ -303,9 +302,10 @@ void Game::update(){
         float character_pos = _character->transform.position.z;
         int num = 4;
         generateRandomObstacles(num,1.0,5.0,-8.0,8.0,character_pos-15,character_pos-5);
-        //std::cout << _obstacles.size() << std::endl;
+        // std::cout << _obstacles.size() << std::endl;
         _moveForward = 0; //clear
     }
+    // std::cout << "end update" << std::endl;
 }
 void Game::handleInput() {
     
@@ -510,6 +510,7 @@ void Game::generateRandomObstacles(
     std::uniform_real_distribution<float> distOffset(-1.0f, 1.0f);
     std::uniform_real_distribution<float> distLength(minLength, maxLength); // 设置障碍物的长度范围
     std::uniform_real_distribution<float> distHeight(0.5f, 1.5f);
+    std::uniform_real_distribution<> shape(0, 6);
     std::set<std::pair<float, float>> obstaclePositions;
 
     int generatedCount = 0;
@@ -534,21 +535,23 @@ void Game::generateRandomObstacles(
 
         bool flag = detectHurdle(x, z);
         if (!flag) {
-            //std::cout << "failed" << std::endl;
+            std::cout << "failed" << std::endl;
             continue;
         }
-        Obstacle cur;
+        int shape_ = shape(gen);
+        std::cout << shape_ << std::endl;
+        // std::cout << shape_ << std::endl;
+        Obstacle cur(shape_);
         cur.transform.position.x = x;
         cur.transform.position.z = z;
         float height = cur.getBoundingBox().min.y; // get the height of the character
         cur.transform.position.y = -height;        // move to exactly the ground
-        cur.transform.scale.x = length;
-        cur.transform.scale.y = Height;
+        // cur.transform.scale.x = length;
+        // cur.transform.scale.y = Height;
         std::uniform_real_distribution<float> distC(0.5,1);
         cur.color = glm::vec3(distC(gen));
 
         _obstacles.insert(std::move(cur));
-    
         ++generatedCount;
     }
 
