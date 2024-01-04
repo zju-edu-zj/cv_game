@@ -300,7 +300,7 @@ void Game::update(){
     const float far_view = 10.0f;
     if(_moveForward >= far_view){
         float character_pos = _character->transform.position.z;
-        int num = 4;
+        int num = 6;
         generateRandomObstacles(num,1.0,5.0,-8.0,8.0,character_pos-15,character_pos-5);
         // std::cout << _obstacles.size() << std::endl;
         _moveForward = 0; //clear
@@ -563,9 +563,10 @@ bool Game::detectHurdle(float x, float z){
         float distx = hurdle.getBoundingBox().max.x; //perhaps 0.5
         float hurdlez = hurdle.transform.position.z;
         float distz = hurdle.getBoundingBox().max.z; //perhaps 0.5
-        if(abs(x-hurdlex)>2*distx && abs(z-hurdlez)>2*distz){
-
+        if(abs(x-hurdlex)>2*distx || abs(z-hurdlez)>2*distz){
+            
         }else{
+            // std::cout << x << "  " << z << "  " << hurdlex << "  " << hurdlez << std::endl;
             return false;
         }
     }
