@@ -63,6 +63,9 @@ private:
     const float panel_width = 5.0;
 
     bool isSpaceValid = true;
+    bool isStopValid = true;
+
+    bool isFailed = false;
 
     float _moveForward = 0; //move forward distance
     
@@ -91,4 +94,6 @@ private:
     void update();
 
     void testOn(); //test the export and import of obj loader
+
+    void initModelResources();
 };

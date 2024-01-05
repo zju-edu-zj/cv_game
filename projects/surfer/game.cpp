@@ -22,26 +22,47 @@ const std::vector<std::string> skyboxTextureRelPaths = {
     "texture/skybox/Down_Tex.jpg",  "texture/skybox/Front_Tex.jpg", "texture/skybox/Back_Tex.jpg"};
 
 Game::Game(const Options& options) : Application(options) {
+
+    initModelResources(); //all the light,sky and character
+    // init shaders
+    initTextureShader();
+    initPhongShader();
+
+    // init imGUI
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    (void)io;
+
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(_window, true);
+    ImGui_ImplOpenGL3_Init();
+}
+void Game::initModelResources(){
     // init model
-    _character.reset(new Model(getAssetFullPath(modelRelPath),true));
-    testOn(); //test obj loader
+    if(_character==nullptr){
+        _character.reset(new Model(getAssetFullPath(modelRelPath)));
+        //testOn(); //test obj loader
+        float angle = glm::radians(-90.0f);
+        glm::quat rotation_more = glm::angleAxis(angle, glm::vec3(0.0f, 1.0f, 0.0f));
+        _character->transform.rotation = rotation_more* _character->transform.rotation; //rotation 90°
+    }
     float height = _character->getBoundingBox().min.y; //get the height of the character
     _character->transform.position = glm::vec3(0.0,-height,5.0); //move to exactly the ground
-    float angle = glm::radians(-90.0f);
-    glm::quat rotation_more = glm::angleAxis(angle, glm::vec3(0.0f, 1.0f, 0.0f));
-    _character->transform.rotation = rotation_more* _character->transform.rotation; //rotation 90°
     //init ground
     _ground.reset(new Ground(20.0,10.0)); //long enough
     _groundTexture.reset(new ImageTexture2D(getAssetFullPath(groundTextureRelPath)));
     _groundTexture->bind();
     
     Transform new_transform;
+    _groundTransforms.clear();
     _groundTransforms.push_back(new_transform);
     new_transform.position.z -= 10;
     _groundTransforms.push_back(new_transform);
     new_transform.position.z -= 10;
     _groundTransforms.push_back(new_transform);
     
+    _obstacles.clear();
     initObstacles();
 
     // init textures
@@ -58,15 +79,19 @@ Game::Game(const Options& options) : Application(options) {
     _phongMaterial->ns = 10; //for ground
 
     // init skybox
-    std::vector<std::string> skyboxTextureFullPaths;
-    for (size_t i = 0; i < skyboxTextureRelPaths.size(); ++i) {
-        skyboxTextureFullPaths.push_back(getAssetFullPath(skyboxTextureRelPaths[i]));
+    if(_skybox==nullptr){
+        std::vector<std::string> skyboxTextureFullPaths;
+        for (size_t i = 0; i < skyboxTextureRelPaths.size(); ++i) {
+            skyboxTextureFullPaths.push_back(getAssetFullPath(skyboxTextureRelPaths[i]));
+        }
+        _skybox.reset(new SkyBox(skyboxTextureFullPaths));
     }
-    _skybox.reset(new SkyBox(skyboxTextureFullPaths));
-
+    
     // init camera
-    _camera.reset(new PerspectiveCamera(
-        glm::radians(50.0f), 1.0f * _windowWidth / _windowHeight, 0.1f, 10000.0f));
+    if(_camera==nullptr){
+        _camera.reset(new PerspectiveCamera(
+            glm::radians(50.0f), 1.0f * _windowWidth / _windowHeight, 0.1f, 10000.0f));
+    }
     _camera->transform.position = glm::vec3(0.0,3.0,12.0);
 
     // init lights
@@ -82,23 +107,7 @@ Game::Game(const Options& options) : Application(options) {
     _spotLight->angle = glm::radians(150.0f);
     _spotLight->transform.position = glm::vec3(0.0f, 1.0f, 4.5f);
     _spotLight->transform.rotation = glm::vec3(0.0f, 0.0f, 0.0f);
-
-
-    // init shaders
-    initTextureShader();
-    initPhongShader();
-
-    // init imGUI
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    (void)io;
-
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(_window, true);
-    ImGui_ImplOpenGL3_Init();
 }
-
 Game::~Game() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -266,6 +275,7 @@ void Game::update(){
         std::cout << "collision detected" << std::endl;
         _speed = 0; //stop
         _velocity = 0; //jump invalid too
+        isFailed = true;
     }
     if(!isSpaceValid){ //the jumping process
         _character->transform.position.y += _velocity*_deltaTime; //jump up
@@ -337,10 +347,14 @@ void Game::handleInput() {
     //static bool is_stop = true;
     static float temp_speed = 0.0f;
     //stop temporarily
-    if (_input.keyboard.keyStates[GLFW_KEY_S] != GLFW_RELEASE) {
+    if (isStopValid && _input.keyboard.keyStates[GLFW_KEY_S] == GLFW_PRESS) {
         float t = _speed;
         _speed = temp_speed;
         temp_speed = t;  //just swap the speeds
+        isStopValid = false;
+    }
+    if(_input.keyboard.keyStates[GLFW_KEY_S] == GLFW_RELEASE){
+        isStopValid = true;
     }
 
     if (_input.keyboard.keyStates[GLFW_KEY_D] != GLFW_RELEASE) {
@@ -360,6 +374,18 @@ void Game::handleInput() {
         isSpaceValid = false; //can jump only once
     }
     
+    static bool isRestartValid = true;
+    if (isFailed && isRestartValid && _input.keyboard.keyStates[GLFW_KEY_R] == GLFW_PRESS) { 
+        //_obstacles.clear();
+        initModelResources(); //clear resources automatically
+        _speed = 4.0f;
+        isRestartValid = false;
+    }
+    if(_input.keyboard.keyStates[GLFW_KEY_S] == GLFW_RELEASE){
+        isRestartValid = true;
+        isFailed = false;  //restart now
+    }
+
 
     _input.forwardState();
 
@@ -535,12 +561,10 @@ void Game::generateRandomObstacles(
 
         bool flag = detectHurdle(x, z);
         if (!flag) {
-            std::cout << "failed" << std::endl;
+            //std::cout << "failed" << std::endl;
             continue;
         }
         int shape_ = shape(gen);
-        std::cout << shape_ << std::endl;
-        // std::cout << shape_ << std::endl;
         Obstacle cur(shape_);
         cur.transform.position.x = x;
         cur.transform.position.z = z;
