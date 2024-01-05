@@ -572,8 +572,6 @@ void Game::generateRandomObstacles(
         cur.transform.position.y = -height;        // move to exactly the ground
         // cur.transform.scale.x = length;
         // cur.transform.scale.y = Height;
-        std::uniform_real_distribution<float> distC(0.5,1);
-        cur.color = glm::vec3(distC(gen));
 
         _obstacles.insert(std::move(cur));
         ++generatedCount;
@@ -599,7 +597,19 @@ bool Game::detectHurdle(float x, float z){
 
 bool Game::collisionDetect(){
     BoundingBox box1 = transformBoundingBox(_character->getBoundingBox(),_character->transform.getLocalMatrix());
+    glm::vec3 aabb_center = _character->transform.position;
     for(auto it=_obstacles.begin();it!=_obstacles.end();++it){
+        if(it->_shape==1){  //sphere
+            glm::vec3 sphere_center = it->transform.position;
+            //glm::vec3 diff = sphere_center - aabb_center;
+            glm::vec3 clamped = glm::clamp(sphere_center,box1.min,box1.max);
+            glm::vec3 difference = clamped - sphere_center;
+            if(glm::length(difference) < it->_shapeInfo){  //in the sphere
+                return true;
+            }
+            continue;
+        }
+
         BoundingBox box2 = transformBoundingBox(it->getBoundingBox(),it->transform.getLocalMatrix());
         // 检查每个维度上的重叠
         bool xOverlap = (box1.min.x <= box2.max.x) && (box1.max.x >= box2.min.x);

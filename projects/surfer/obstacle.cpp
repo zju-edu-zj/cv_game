@@ -55,7 +55,7 @@ Obstacle::Obstacle() {
     this->transform = transform;
 }
 
-Obstacle::Obstacle(int shape){
+Obstacle::Obstacle(int shape):_shape(shape){
     switch (shape)
     {
         case 0:
@@ -64,7 +64,8 @@ Obstacle::Obstacle(int shape){
             break;
         case 1:
             createSphere(0.6, 100, 50);
-            break;
+            _shapeInfo = 0.6; //record radius
+            break; 
         case 2:
             createCylinder(0.7, 1.2, 50);
             break;
@@ -88,6 +89,7 @@ Obstacle::Obstacle(int shape){
 
 Obstacle::Obstacle(Obstacle&& rhs):Model(std::move(rhs)){
     transform = rhs.transform; //just copy 
+    _shape = rhs._shape;
     initGLResources(); //gl resources have been freed 
 
     initBoxGLResources();
@@ -97,6 +99,7 @@ Obstacle& Obstacle::operator=(Obstacle&& rhs) {
     if (this != &rhs) {
         Model::operator=(std::move(rhs)); // 移动赋值基类部分
 
+        _shape = rhs._shape;
         transform = std::move(rhs.transform); // 移动赋值 transform
         // 对于其他成员变量进行移动赋值操作（如果有）
 
