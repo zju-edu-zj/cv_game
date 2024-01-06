@@ -90,6 +90,7 @@ Obstacle::Obstacle(int shape):_shape(shape){
 Obstacle::Obstacle(Obstacle&& rhs):Model(std::move(rhs)){
     transform = rhs.transform; //just copy 
     _shape = rhs._shape;
+    _shapeInfo = rhs._shapeInfo;
     initGLResources(); //gl resources have been freed 
 
     initBoxGLResources();
